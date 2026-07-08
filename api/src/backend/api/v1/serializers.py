@@ -1739,25 +1739,20 @@ class OracleCloudProviderSecret(serializers.Serializer):
     key_file = serializers.CharField(required=False)
     key_content = serializers.CharField(required=False)
     tenancy = serializers.CharField()
-    regions = serializers.ListField(
-        child=serializers.CharField(allow_blank=False),
-        allow_empty=False,
-        required=False,
-        help_text="OCI regions to audit. Canonical field for new payloads.",
-    )
     region = serializers.CharField(
         required=False,
-        help_text="Legacy single OCI region. Deprecated; use regions instead.",
+        help_text="Legacy single OCI region. Deprecated; omit it to discover subscribed regions.",
     )
     pass_phrase = serializers.CharField(required=False)
 
     def validate(self, attrs):
-        has_regions = "regions" in attrs
         has_region = "region" in attrs
 
-        if has_regions and has_region:
+        if "regions" in getattr(self, "initial_data", {}):
             raise serializers.ValidationError(
-                {"region": "Provide either regions or legacy region, not both."}
+                {
+                    "regions": "This field is not supported. Omit it to discover subscribed regions."
+                }
             )
 
         if "key_file" not in attrs and "key_content" not in attrs:
@@ -1765,18 +1760,7 @@ class OracleCloudProviderSecret(serializers.Serializer):
                 {"key_file": "Either key_file or key_content must be provided."}
             )
 
-        if has_regions:
-            regions = [region.strip() for region in attrs["regions"]]
-            if any(not region for region in regions):
-                raise serializers.ValidationError(
-                    {"regions": "Regions cannot contain blank values."}
-                )
-            if len(regions) != len(set(regions)):
-                raise serializers.ValidationError(
-                    {"regions": "Regions cannot contain duplicate values."}
-                )
-            attrs["regions"] = regions
-        elif has_region:
+        if has_region:
             region = attrs["region"].strip()
             if not region:
                 raise serializers.ValidationError({"region": "Region cannot be blank."})

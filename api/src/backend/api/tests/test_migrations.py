@@ -8,7 +8,7 @@ from django.apps import apps
 
 @pytest.mark.django_db
 class TestRemoveOraclecloudSecretRegionsMigration:
-    def test_removes_region_fields_from_oraclecloud_secrets_only(
+    def test_removes_regions_field_from_oraclecloud_secrets_only(
         self, providers_fixture
     ):
         oraclecloud_provider = providers_fixture[6]
@@ -47,6 +47,6 @@ class TestRemoveOraclecloudSecretRegionsMigration:
 
         oraclecloud_secret = ProviderSecret.all_objects.get(pk=oraclecloud_secret.pk)
         aws_secret.refresh_from_db()
-        assert "region" not in oraclecloud_secret.secret
+        assert oraclecloud_secret.secret["region"] == "us-ashburn-1"
         assert "regions" not in oraclecloud_secret.secret
         assert aws_secret.secret["region"] == "us-east-1"

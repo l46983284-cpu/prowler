@@ -2992,18 +2992,6 @@ class TestProviderSecretViewSet:
                     "tenancy": "ocid1.tenancy.oc1..aaaaaaaa3dwoazoox4q7wrvriywpokp5grlhgnkwtyt6dmwyou7no6mdmzda",
                 },
             ),
-            # OCI with explicit region filters
-            (
-                Provider.ProviderChoices.ORACLECLOUD.value,
-                ProviderSecret.TypeChoices.STATIC,
-                {
-                    "user": "ocid1.user.oc1..aaaaaaaakldibrbov4ubh25aqdeiroklxjngwka7u6w7no3glmdq3n5sxtkq",
-                    "fingerprint": "aa:bb:cc:dd:ee:ff:00:11:22:33:44:55:66:77:88:99",
-                    "key_content": "test-key-content",
-                    "tenancy": "ocid1.tenancy.oc1..aaaaaaaa3dwoazoox4q7wrvriywpokp5grlhgnkwtyt6dmwyou7no6mdmzda",
-                    "regions": ["us-ashburn-1", "us-phoenix-1"],
-                },
-            ),
             # OCI with API key credentials (with passphrase)
             (
                 Provider.ProviderChoices.ORACLECLOUD.value,
@@ -3181,7 +3169,7 @@ class TestProviderSecretViewSet:
         assert "region" not in provider_secret.secret
         assert "regions" not in provider_secret.secret
 
-    def test_provider_secrets_create_oraclecloud_with_regions_stores_regions(
+    def test_provider_secrets_create_oraclecloud_rejects_regions(
         self,
         authenticated_client,
         providers_fixture,
@@ -3192,12 +3180,14 @@ class TestProviderSecretViewSet:
             self._oraclecloud_secret(regions=["us-ashburn-1", "us-phoenix-1"]),
         )
 
-        assert response.status_code == status.HTTP_201_CREATED
-        provider_secret = ProviderSecret.objects.get()
-        assert provider_secret.secret["regions"] == ["us-ashburn-1", "us-phoenix-1"]
-        assert "region" not in provider_secret.secret
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        errors = response.json()["errors"]
+        assert errors[0]["status"] == "400"
+        assert errors[0]["code"] == "invalid"
+        assert errors[0]["source"]["pointer"] == "/data/attributes/secret/regions"
+        assert ProviderSecret.objects.count() == 0
 
-    def test_provider_secrets_create_oraclecloud_rejects_region_and_regions(
+    def test_provider_secrets_create_oraclecloud_with_legacy_region_stores_region(
         self,
         authenticated_client,
         providers_fixture,
@@ -3205,14 +3195,13 @@ class TestProviderSecretViewSet:
         response = self._create_oraclecloud_secret(
             authenticated_client,
             providers_fixture,
-            self._oraclecloud_secret(region="us-ashburn-1", regions=["us-phoenix-1"]),
+            self._oraclecloud_secret(region="us-ashburn-1"),
         )
 
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        errors = response.json()["errors"]
-        assert errors[0]["status"] == "400"
-        assert errors[0]["code"] == "invalid"
-        assert errors[0]["source"]["pointer"] == "/data/attributes/secret/region"
+        assert response.status_code == status.HTTP_201_CREATED
+        provider_secret = ProviderSecret.objects.get()
+        assert provider_secret.secret["region"] == "us-ashburn-1"
+        assert "regions" not in provider_secret.secret
 
     def test_provider_secrets_update_oraclecloud_without_regions_stores_neither(
         self,
@@ -3222,7 +3211,7 @@ class TestProviderSecretViewSet:
         create_response = self._create_oraclecloud_secret(
             authenticated_client,
             providers_fixture,
-            self._oraclecloud_secret(regions=["us-ashburn-1"]),
+            self._oraclecloud_secret(region="us-ashburn-1"),
         )
         provider_secret = ProviderSecret.objects.get(
             id=create_response.json()["data"]["id"]
@@ -3246,7 +3235,7 @@ class TestProviderSecretViewSet:
         assert "region" not in provider_secret.secret
         assert "regions" not in provider_secret.secret
 
-    def test_provider_secrets_update_oraclecloud_with_regions_stores_regions(
+    def test_provider_secrets_update_oraclecloud_rejects_regions(
         self,
         authenticated_client,
         providers_fixture,
@@ -3277,12 +3266,13 @@ class TestProviderSecretViewSet:
             content_type="application/vnd.api+json",
         )
 
-        assert response.status_code == status.HTTP_200_OK
-        provider_secret.refresh_from_db()
-        assert provider_secret.secret["regions"] == ["us-ashburn-1", "us-phoenix-1"]
-        assert "region" not in provider_secret.secret
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        errors = response.json()["errors"]
+        assert errors[0]["status"] == "400"
+        assert errors[0]["code"] == "invalid"
+        assert errors[0]["source"]["pointer"] == "/data/attributes/secret/regions"
 
-    def test_provider_secrets_update_oraclecloud_rejects_region_and_regions(
+    def test_provider_secrets_update_oraclecloud_with_legacy_region_stores_region(
         self,
         authenticated_client,
         providers_fixture,
@@ -3300,9 +3290,7 @@ class TestProviderSecretViewSet:
                 "type": "provider-secrets",
                 "id": str(provider_secret.id),
                 "attributes": {
-                    "secret": self._oraclecloud_secret(
-                        region="us-ashburn-1", regions=["us-phoenix-1"]
-                    )
+                    "secret": self._oraclecloud_secret(region="us-ashburn-1")
                 },
             }
         }
@@ -3313,11 +3301,10 @@ class TestProviderSecretViewSet:
             content_type="application/vnd.api+json",
         )
 
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        errors = response.json()["errors"]
-        assert errors[0]["status"] == "400"
-        assert errors[0]["code"] == "invalid"
-        assert errors[0]["source"]["pointer"] == "/data/attributes/secret/region"
+        assert response.status_code == status.HTTP_200_OK
+        provider_secret.refresh_from_db()
+        assert provider_secret.secret["region"] == "us-ashburn-1"
+        assert "regions" not in provider_secret.secret
 
     @pytest.mark.parametrize(
         "attributes, error_code, error_pointer",

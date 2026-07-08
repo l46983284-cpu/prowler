@@ -26,10 +26,9 @@ def remove_oraclecloud_secret_regions(apps, schema_editor):
                     encrypted_secret = encrypted_secret.encode()
 
                 secret = json.loads(fernet.decrypt(encrypted_secret).decode())
-                if "region" not in secret and "regions" not in secret:
+                if "regions" not in secret:
                     continue
 
-                secret.pop("region", None)
                 secret.pop("regions", None)
                 provider_secret._secret = fernet.encrypt(json.dumps(secret).encode())
                 provider_secret.save(update_fields=["_secret"], using=db_alias)

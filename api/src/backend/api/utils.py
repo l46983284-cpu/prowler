@@ -293,10 +293,7 @@ def _normalize_oraclecloud_provider_kwargs(secret: dict) -> dict:
     """Normalize external OCI secret fields into SDK provider kwargs."""
     prowler_provider_kwargs = secret.copy()
 
-    if "regions" in prowler_provider_kwargs:
-        regions = prowler_provider_kwargs.pop("regions")
-        prowler_provider_kwargs["region"] = set(regions)
-    elif "region" in prowler_provider_kwargs:
+    if "region" in prowler_provider_kwargs:
         prowler_provider_kwargs["region"] = {prowler_provider_kwargs["region"]}
 
     return prowler_provider_kwargs
@@ -305,11 +302,6 @@ def _normalize_oraclecloud_provider_kwargs(secret: dict) -> dict:
 def _normalize_oraclecloud_connection_test_kwargs(secret: dict) -> dict:
     """Normalize external OCI secret fields into test_connection kwargs."""
     prowler_provider_kwargs = secret.copy()
-
-    if "regions" in prowler_provider_kwargs:
-        regions = prowler_provider_kwargs.pop("regions")
-        if regions:
-            prowler_provider_kwargs["region"] = sorted(regions)[0]
 
     if (
         "region" not in prowler_provider_kwargs

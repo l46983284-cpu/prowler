@@ -297,14 +297,8 @@ from rest_framework_json_api import serializers
                     "region": {
                         "type": "string",
                         "description": "Legacy optional single OCI region filter. "
-                        "Deprecated; use regions for explicit scan scope filters.",
-                    },
-                    "regions": {
-                        "type": "array",
-                        "minItems": 1,
-                        "items": {"type": "string", "minLength": 1},
-                        "description": "Optional explicit OCI regions to audit. Omit to audit all "
-                        "subscribed OCI regions discovered from the tenancy.",
+                        "Deprecated; omit this field to audit all subscribed OCI "
+                        "regions discovered from the tenancy.",
                     },
                     "pass_phrase": {
                         "type": "string",
@@ -316,7 +310,6 @@ from rest_framework_json_api import serializers
                     {"required": ["key_file"]},
                     {"required": ["key_content"]},
                 ],
-                "not": {"required": ["region", "regions"]},
             },
             {
                 "type": "object",
