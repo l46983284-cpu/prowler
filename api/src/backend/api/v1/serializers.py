@@ -1608,6 +1608,7 @@ class BaseWriteProviderSecretSerializer(BaseWriteSerializer):
                 validation_error.detail[f"secret/{key}"] = value
                 del validation_error.detail[key]
             raise validation_error
+        return serializer.validated_data
 
 
 class AwsProviderSecret(serializers.Serializer):
@@ -1911,7 +1912,9 @@ class ProviderSecretCreateSerializer(RLSSerializer, BaseWriteProviderSecretSeria
         secret = attrs.get("secret")
 
         validated_attrs = super().validate(attrs)
-        self.validate_secret_based_on_provider(provider.provider, secret_type, secret)
+        validated_attrs["secret"] = self.validate_secret_based_on_provider(
+            provider.provider, secret_type, secret
+        )
         return validated_attrs
 
 
@@ -1943,7 +1946,9 @@ class ProviderSecretUpdateSerializer(BaseWriteProviderSecretSerializer):
         secret = attrs.get("secret")
 
         validated_attrs = super().validate(attrs)
-        self.validate_secret_based_on_provider(provider.provider, secret_type, secret)
+        validated_attrs["secret"] = self.validate_secret_based_on_provider(
+            provider.provider, secret_type, secret
+        )
         return validated_attrs
 
 

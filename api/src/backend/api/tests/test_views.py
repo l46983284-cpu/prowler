@@ -3195,7 +3195,7 @@ class TestProviderSecretViewSet:
         response = self._create_oraclecloud_secret(
             authenticated_client,
             providers_fixture,
-            self._oraclecloud_secret(region="us-ashburn-1"),
+            self._oraclecloud_secret(region=" us-ashburn-1 "),
         )
 
         assert response.status_code == status.HTTP_201_CREATED
@@ -3290,7 +3290,7 @@ class TestProviderSecretViewSet:
                 "type": "provider-secrets",
                 "id": str(provider_secret.id),
                 "attributes": {
-                    "secret": self._oraclecloud_secret(region="us-ashburn-1")
+                    "secret": self._oraclecloud_secret(region=" us-ashburn-1 ")
                 },
             }
         }
