@@ -9,10 +9,8 @@ from django.apps import apps
 @pytest.mark.django_db
 class TestRemoveOraclecloudSecretRegionsMigration:
     def test_removes_regions_field_from_oraclecloud_secrets_only(
-        self, providers_fixture
+        self, aws_provider, oraclecloud_provider
     ):
-        oraclecloud_provider = providers_fixture[6]
-        aws_provider = providers_fixture[0]
         oraclecloud_secret = ProviderSecret.objects.create(
             tenant_id=oraclecloud_provider.tenant_id,
             provider=oraclecloud_provider,

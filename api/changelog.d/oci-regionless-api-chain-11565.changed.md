@@ -1,0 +1,1 @@
+OCI provider secrets can now omit `region`; existing OCI secrets are migrated to remove stored `regions` filters, so migrated providers discover and scan all subscribed regions by default while new payloads reject legacy multi-region filters

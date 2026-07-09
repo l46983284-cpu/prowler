@@ -55,10 +55,6 @@ All notable changes to the **Prowler SDK** are documented in this file.
 - `awslambda_function_no_secrets_in_code` now supports a `secrets_ignore_files` audit-config option to skip files inside the deployment package by glob pattern (e.g. `*.deps.json`), suppressing .NET dependency-manifest false positives without masking real secrets [(#11222)](https://github.com/prowler-cloud/prowler/pull/11222)
 - AWS scans for EBS snapshots, Backup recovery points, CloudWatch log groups, Lambda functions, ECS task definitions, and CodeArtifact packages now support configurable resource analysis limits via `aws.max_scanned_resources_per_service`; limits are disabled by default and only positive values cap analyzed resources [(#11228)](https://github.com/prowler-cloud/prowler/pull/11228)
 
-### 🔄 Changed
-
-- Oracle Cloud API key authentication now uses an internal bootstrap region when no explicit scan region filter is provided [(#11565)](https://github.com/prowler-cloud/prowler/pull/11565)
-
 ### 🐞 Fixed
 
 - GitHub `repository_has_codeowners_file` check no longer flags archived repositories, since they are read-only and cannot be updated without first being unarchived, making the finding not actionable [(#11735)](https://github.com/prowler-cloud/prowler/pull/11735)
