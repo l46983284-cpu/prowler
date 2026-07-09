@@ -899,3 +899,59 @@ class TestGetRegionsToAudit:
         assert "Could not retrieve subscribed OCI regions" in error_message
         assert "inspect tenancies" in error_message
         assert "ListRegionSubscriptions" in error_message
+
+    def test_single_explicit_region_not_subscribed_raises(self):
+        provider = self._provider_with_identity()
+
+        with patch("oci.identity.IdentityClient") as mock_identity_client:
+            mock_identity_client.return_value.list_region_subscriptions.return_value.data = [
+                MagicMock(region_name="us-ashburn-1", is_home_region=True),
+                MagicMock(region_name="us-phoenix-1", is_home_region=False),
+            ]
+
+            with pytest.raises(OCISetUpSessionError) as exc_info:
+                provider.get_regions_to_audit("eu-frankfurt-1")
+
+        error_message = str(exc_info.value)
+        assert (
+            "Requested OCI region(s) are not subscribed or unavailable" in error_message
+        )
+        assert "eu-frankfurt-1" in error_message
+
+    def test_multiple_explicit_regions_not_subscribed_raise(self):
+        provider = self._provider_with_identity()
+
+        with patch("oci.identity.IdentityClient") as mock_identity_client:
+            mock_identity_client.return_value.list_region_subscriptions.return_value.data = [
+                MagicMock(region_name="us-ashburn-1", is_home_region=True),
+                MagicMock(region_name="us-phoenix-1", is_home_region=False),
+            ]
+
+            with pytest.raises(OCISetUpSessionError) as exc_info:
+                provider.get_regions_to_audit({"eu-frankfurt-1", "uk-london-1"})
+
+        error_message = str(exc_info.value)
+        assert (
+            "Requested OCI region(s) are not subscribed or unavailable" in error_message
+        )
+        assert "eu-frankfurt-1" in error_message
+        assert "uk-london-1" in error_message
+
+    def test_mixed_explicit_regions_raise_for_unsubscribed_regions(self):
+        provider = self._provider_with_identity()
+
+        with patch("oci.identity.IdentityClient") as mock_identity_client:
+            mock_identity_client.return_value.list_region_subscriptions.return_value.data = [
+                MagicMock(region_name="us-ashburn-1", is_home_region=True),
+                MagicMock(region_name="us-phoenix-1", is_home_region=False),
+            ]
+
+            with pytest.raises(OCISetUpSessionError) as exc_info:
+                provider.get_regions_to_audit({"eu-frankfurt-1", "us-phoenix-1"})
+
+        error_message = str(exc_info.value)
+        assert (
+            "Requested OCI region(s) are not subscribed or unavailable" in error_message
+        )
+        assert "eu-frankfurt-1" in error_message
+        assert "us-phoenix-1" not in error_message

@@ -592,9 +592,23 @@ class OraclecloudProvider(Provider):
         if not explicit_regions:
             return subscribed_regions
 
-        return [
+        filtered_regions = [
             region for region in subscribed_regions if region.key in explicit_regions
         ]
+        subscribed_region_keys = {region.key for region in subscribed_regions}
+        unsubscribed_regions = explicit_regions - subscribed_region_keys
+
+        if unsubscribed_regions:
+            requested_regions = ", ".join(sorted(unsubscribed_regions))
+            raise OCISetUpSessionError(
+                file=pathlib.Path(__file__).name,
+                message=(
+                    "Requested OCI region(s) are not subscribed or unavailable "
+                    f"for this tenancy: {requested_regions}"
+                ),
+            )
+
+        return filtered_regions
 
     def get_regions_to_audit(self, region_set: str | Iterable[str] = None) -> list:
         """
@@ -635,7 +649,9 @@ class OraclecloudProvider(Provider):
                 )
 
             regions = self._filter_regions_to_audit(regions, region_set)
-            logger.info(f"Found {len(regions)} subscribed regions")
+            logger.info(f"Found {len(regions)} OCI regions to audit")
+        except OCISetUpSessionError:
+            raise
         except Exception as error:
             logger.critical(
                 f"OCISetUpSessionError[{error.__traceback__.tb_lineno}]: {error}"
