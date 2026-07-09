@@ -170,11 +170,11 @@ class OraclecloudProvider(Provider):
         logger.info("OCI credentials validated")
 
         # Get regions
-        self._regions = self.get_regions_to_audit(region)
+        all_subscribed_regions = self.get_regions_to_audit()
+        self._regions = self._filter_regions_to_audit(all_subscribed_regions, region)
         # Determine the tenancy home region from the full subscription list, independent of
         # the --region filter, so tenancy-level APIs (e.g. the Audit configuration) always
         # target the home region instead of a filtered, non-home region.
-        all_subscribed_regions = self.get_regions_to_audit()
         self._home_region = next(
             (region.key for region in all_subscribed_regions if region.is_home_region),
             self._regions[0].key if self._regions else "us-ashburn-1",
@@ -562,6 +562,23 @@ class OraclecloudProvider(Provider):
 
         return True
 
+    @staticmethod
+    def _filter_regions_to_audit(
+        subscribed_regions: list, region_set: set = None
+    ) -> list:
+        explicit_regions = None
+        if isinstance(region_set, str):
+            explicit_regions = {region_set}
+        elif region_set:
+            explicit_regions = set(region_set)
+
+        if not explicit_regions:
+            return subscribed_regions
+
+        return [
+            region for region in subscribed_regions if region.key in explicit_regions
+        ]
+
     def get_regions_to_audit(self, region_set: set = None) -> list:
         """
         get_regions_to_audit returns the list of regions to audit.
@@ -573,12 +590,6 @@ class OraclecloudProvider(Provider):
             - list: The list of OCIRegion objects to audit.
         """
         regions = []
-
-        explicit_regions = None
-        if isinstance(region_set, str):
-            explicit_regions = {region_set}
-        elif region_set:
-            explicit_regions = set(region_set)
 
         # Audit all subscribed regions
         try:
@@ -595,24 +606,23 @@ class OraclecloudProvider(Provider):
                 self._identity.tenancy_id
             ).data
 
-            # Check if auditing specific region or all
-            regions_check = explicit_regions or [
-                sub.region_name for sub in region_subscriptions
-            ]
-
             for region_sub in region_subscriptions:
-                if region_sub.region_name in regions_check:
-                    regions.append(
-                        OCIRegion(
-                            key=region_sub.region_name,
-                            name=OCI_REGIONS.get(
-                                region_sub.region_name, region_sub.region_name
-                            ),
-                            is_home_region=region_sub.is_home_region,
-                        )
+                regions.append(
+                    OCIRegion(
+                        key=region_sub.region_name,
+                        name=OCI_REGIONS.get(
+                            region_sub.region_name, region_sub.region_name
+                        ),
+                        is_home_region=region_sub.is_home_region,
                     )
+                )
+
+            regions = self._filter_regions_to_audit(regions, region_set)
             logger.info(f"Found {len(regions)} subscribed regions")
         except Exception as error:
+            logger.critical(
+                f"OCISetUpSessionError[{error.__traceback__.tb_lineno}]: {error}"
+            )
             raise OCISetUpSessionError(
                 original_exception=error,
                 message=OraclecloudProvider._region_subscriptions_error_message,
@@ -938,6 +948,9 @@ class OraclecloudProvider(Provider):
                     identity_client = oci.identity.IdentityClient(config=session.config)
                 identity_client.list_region_subscriptions(identity.tenancy_id)
             except Exception as error:
+                logger.critical(
+                    f"OCISetUpSessionError[{error.__traceback__.tb_lineno}]: {error}"
+                )
                 raise OCISetUpSessionError(
                     original_exception=error,
                     message=OraclecloudProvider._region_subscriptions_error_message,

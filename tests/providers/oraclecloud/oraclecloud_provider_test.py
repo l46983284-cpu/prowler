@@ -248,6 +248,9 @@ MIIEpQIBAAKCAQEA0Z3VS5JJcds3xfn/ygWyF8n0sMcD/QHWCJ7yGSEtLN2T
         with (
             patch("oci.config.validate_config"),
             patch("oci.identity.IdentityClient") as mock_identity_client,
+            patch(
+                "prowler.providers.oraclecloud.oraclecloud_provider.logger.critical"
+            ) as mock_logger_critical,
         ):
             mock_tenancy = MagicMock()
             mock_tenancy.name = "test-tenancy"
@@ -275,6 +278,10 @@ MIIEpQIBAAKCAQEA0Z3VS5JJcds3xfn/ygWyF8n0sMcD/QHWCJ7yGSEtLN2T
         assert "Could not retrieve subscribed OCI regions" in error_message
         assert "inspect tenancies" in error_message
         assert "ListRegionSubscriptions" in error_message
+        assert any(
+            "OCISetUpSessionError[" in call.args[0] and "not authorized" in call.args[0]
+            for call in mock_logger_critical.call_args_list
+        )
 
     def test_test_connection_region_subscription_discovery_failure_raises(self):
         encoded_key = self._encoded_private_key()
@@ -326,8 +333,11 @@ class TestOraclecloudProviderInit:
             audited_regions=set(),
             audited_compartments=[],
         )
-        mock_regions = [
+        all_subscribed_regions = [
             OCIRegion(key="us-phoenix-1", name="us-phoenix-1", is_home_region=False),
+            OCIRegion(key="us-ashburn-1", name="us-ashburn-1", is_home_region=True),
+        ]
+        audited_regions = [
             OCIRegion(key="us-ashburn-1", name="us-ashburn-1", is_home_region=True),
         ]
         mock_compartments = ["ocid1.compartment.oc1..aaaaaaaexample"]
@@ -342,7 +352,7 @@ class TestOraclecloudProviderInit:
             ),
             patch(
                 "prowler.providers.oraclecloud.oraclecloud_provider.OraclecloudProvider.get_regions_to_audit",
-                return_value=mock_regions,
+                return_value=all_subscribed_regions,
             ),
             patch(
                 "prowler.providers.oraclecloud.oraclecloud_provider.OraclecloudProvider.get_compartments_to_audit",
@@ -360,7 +370,7 @@ class TestOraclecloudProviderInit:
         assert mock_setup_session.call_args.kwargs["region"] == "us-ashburn-1"
         assert provider.session == mock_session
         assert provider.identity == mock_identity
-        assert provider.regions == mock_regions
+        assert provider.regions == audited_regions
         assert provider.compartments == mock_compartments
         assert provider.home_region == "us-ashburn-1"
         mock_set_global.assert_called_once_with(provider)
@@ -413,9 +423,7 @@ class TestOraclecloudProviderInit:
 
         assert mock_setup_session.call_args.kwargs["region"] == "us-ashburn-1"
         assert mock_set_identity.call_args.kwargs["region"] == "us-ashburn-1"
-        assert mock_get_regions_to_audit.call_args_list[0].args == (
-            {"us-phoenix-1", "us-ashburn-1"},
-        )
+        assert mock_get_regions_to_audit.call_args_list[0].args == ()
         assert provider.regions == audited_regions
 
     def test_init_with_legacy_region_string_uses_full_region_for_identity(self):
@@ -515,7 +523,7 @@ class TestOraclecloudProviderInit:
 
         assert mock_setup_session.call_args.kwargs["region"] == "us-ashburn-1"
         assert mock_set_identity.call_args.kwargs["region"] == "us-ashburn-1"
-        assert mock_get_regions_to_audit.call_args_list[0].args == (None,)
+        assert mock_get_regions_to_audit.call_args_list[0].args == ()
         assert provider.regions == all_subscribed_regions
 
     def test_home_region_uses_full_subscription_list_not_region_filter(self):
@@ -559,8 +567,8 @@ class TestOraclecloudProviderInit:
             ),
             patch(
                 "prowler.providers.oraclecloud.oraclecloud_provider.OraclecloudProvider.get_regions_to_audit",
-                side_effect=[audited_regions, all_subscribed_regions],
-            ),
+                return_value=all_subscribed_regions,
+            ) as mock_get_regions_to_audit,
             patch(
                 "prowler.providers.oraclecloud.oraclecloud_provider.OraclecloudProvider.get_compartments_to_audit",
                 return_value=["ocid1.compartment.oc1..aaaaaaaexample"],
@@ -575,6 +583,7 @@ class TestOraclecloudProviderInit:
 
         assert provider.regions == audited_regions
         assert provider.home_region == "us-ashburn-1"
+        mock_get_regions_to_audit.assert_called_once_with()
 
     def test_init_with_legacy_single_region_raises_when_region_discovery_fails(self):
         mock_session = OCISession(
@@ -643,7 +652,12 @@ class TestGetRegionsToAudit:
     def test_regionless_scan_raises_when_region_subscription_discovery_fails(self):
         provider = self._provider_with_identity()
 
-        with patch("oci.identity.IdentityClient") as mock_identity_client:
+        with (
+            patch("oci.identity.IdentityClient") as mock_identity_client,
+            patch(
+                "prowler.providers.oraclecloud.oraclecloud_provider.logger.critical"
+            ) as mock_logger_critical,
+        ):
             mock_identity_client.return_value.list_region_subscriptions.side_effect = (
                 Exception("discovery failed")
             )
@@ -655,6 +669,11 @@ class TestGetRegionsToAudit:
         assert "Could not retrieve subscribed OCI regions" in error_message
         assert "inspect tenancies" in error_message
         assert "ListRegionSubscriptions" in error_message
+        assert any(
+            "OCISetUpSessionError[" in call.args[0]
+            and "discovery failed" in call.args[0]
+            for call in mock_logger_critical.call_args_list
+        )
 
     def test_single_explicit_region_raises_when_region_subscription_discovery_fails(
         self,

@@ -2,6 +2,8 @@
 title: 'Getting Started with Oracle Cloud Infrastructure (OCI)'
 ---
 
+import { VersionBadge } from "/snippets/version-badge.mdx"
+
 Prowler supports security scanning of Oracle Cloud Infrastructure (OCI) environments. This guide will help you get started with using Prowler to audit your OCI tenancy.
 
 ## Prowler Cloud
@@ -15,12 +17,15 @@ The following steps apply to Prowler Cloud and the self-hosted Prowler App.
 
 ### Step 2: Access Prowler Cloud
 1. Navigate to [Prowler Cloud](https://cloud.prowler.com/) or launch [Prowler App](/user-guide/tutorials/prowler-app).
-2. Go to **Configuration** → **Providers** and click **Add Provider**.
+2. Go to **Configuration** → **Providers** and click "Add Provider".
 ![Add OCI Provider](./images/oci-add-cloud-provider.png)
-3. Select **Oracle Cloud** and enter the **Tenancy OCID** and an optional alias, then choose **Next**.
+3. Select **Oracle Cloud** and enter the **Tenancy OCID** and an optional alias, then choose "Next".
 ![Add OCI Cloud Tenancy](./images/oci-add-tenancy.png)
 
 ### Step 3: Add OCI API Key Credentials
+
+<VersionBadge version="5.32.0" />
+
 Prowler App connects to OCI with API key credentials. Provide:
 
 - **User OCID** for the API key owner
@@ -28,7 +33,7 @@ Prowler App connects to OCI with API key credentials. Provide:
 - **Private Key Content** (paste the full PEM value)
 - **Passphrase (Optional)** if the private key is encrypted
 
-Select **Next**, then **Launch Scan** to validate the connection and start the first OCI scan. Prowler discovers subscribed regions from OCI, and the private key content is encoded for secure transmission.
+Select "Next", then "Launch Scan" to validate the connection and start the first OCI scan. Prowler discovers subscribed regions from OCI, and the private key content is encoded for secure transmission.
 
 ![Add OCI API Key Credentials](./images/oci-add-api-key-credentials.png)
 
@@ -339,7 +344,7 @@ prowler oci \
 
 **Error: "Could not retrieve subscribed OCI regions"**
 - Ensure the principal has `Allow group prowler-users to inspect tenancies in tenancy` or the equivalent dynamic-group policy
-- Prowler uses `ListRegionSubscriptions`, which requires the OCI `TENANCY_INSPECT` permission, to discover subscribed regions before scanning
+- Prowler uses `ListRegionSubscriptions`, which requires the OCI `TENANCY_INSPECT` permission, to discover subscribed regions before scanning.
 
 **Error: "Invalid region"**
 - Check available regions: `prowler oci --list-regions`
