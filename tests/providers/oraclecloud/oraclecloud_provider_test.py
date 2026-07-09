@@ -149,6 +149,15 @@ class TestSetIdentityAuthenticationErrors:
 class TestTestConnectionKeyValidation:
     """Tests for key_content validation in test_connection()"""
 
+    @staticmethod
+    def _encoded_private_key():
+        import base64
+
+        private_key = (
+            "-----BEGIN RSA PRIVATE KEY-----\nfake\n-----END RSA PRIVATE KEY-----"
+        )
+        return base64.b64encode(private_key.encode("utf-8")).decode("utf-8")
+
     def test_test_connection_invalid_base64_key_raises_error(self):
         """Test invalid base64 key content raises OCIInvalidConfigError."""
         with pytest.raises(OCIInvalidConfigError) as exc_info:
@@ -205,12 +214,7 @@ MIIEpQIBAAKCAQEA0Z3VS5JJcds3xfn/ygWyF8n0sMcD/QHWCJ7yGSEtLN2T
         self,
     ):
         """Direct API key auth should not fall back to config-file auth without a region."""
-        import base64
-
-        valid_key = (
-            "-----BEGIN RSA PRIVATE KEY-----\nfake\n-----END RSA PRIVATE KEY-----"
-        )
-        encoded_key = base64.b64encode(valid_key.encode("utf-8")).decode("utf-8")
+        encoded_key = self._encoded_private_key()
 
         with (
             patch("oci.config.validate_config") as mock_validate_config,
@@ -235,6 +239,75 @@ MIIEpQIBAAKCAQEA0Z3VS5JJcds3xfn/ygWyF8n0sMcD/QHWCJ7yGSEtLN2T
 
         assert connection.is_connected is True
         assert mock_validate_config.call_args.args[0]["region"] == "us-ashburn-1"
+
+    def test_test_connection_region_subscription_discovery_failure_returns_error(
+        self,
+    ):
+        encoded_key = self._encoded_private_key()
+
+        with (
+            patch("oci.config.validate_config"),
+            patch("oci.identity.IdentityClient") as mock_identity_client,
+        ):
+            mock_tenancy = MagicMock()
+            mock_tenancy.name = "test-tenancy"
+            mock_response = MagicMock()
+            mock_response.data = mock_tenancy
+            mock_client_instance = MagicMock()
+            mock_client_instance.get_tenancy.return_value = mock_response
+            mock_client_instance.list_region_subscriptions.side_effect = Exception(
+                "not authorized"
+            )
+            mock_identity_client.return_value = mock_client_instance
+
+            connection = OraclecloudProvider.test_connection(
+                key_content=encoded_key,
+                user="ocid1.user.oc1..aaaaaaaexample",
+                fingerprint="aa:bb:cc:dd:ee:ff:00:11:22:33:44:55:66:77:88:99",
+                tenancy="ocid1.tenancy.oc1..aaaaaaaexample",
+                provider_id="ocid1.tenancy.oc1..aaaaaaaexample",
+                raise_on_exception=False,
+            )
+
+        assert connection.is_connected is False
+        assert isinstance(connection.error, OCISetUpSessionError)
+        error_message = str(connection.error)
+        assert "Could not retrieve subscribed OCI regions" in error_message
+        assert "inspect tenancies" in error_message
+        assert "ListRegionSubscriptions" in error_message
+
+    def test_test_connection_region_subscription_discovery_failure_raises(self):
+        encoded_key = self._encoded_private_key()
+
+        with (
+            patch("oci.config.validate_config"),
+            patch("oci.identity.IdentityClient") as mock_identity_client,
+        ):
+            mock_tenancy = MagicMock()
+            mock_tenancy.name = "test-tenancy"
+            mock_response = MagicMock()
+            mock_response.data = mock_tenancy
+            mock_client_instance = MagicMock()
+            mock_client_instance.get_tenancy.return_value = mock_response
+            mock_client_instance.list_region_subscriptions.side_effect = Exception(
+                "not authorized"
+            )
+            mock_identity_client.return_value = mock_client_instance
+
+            with pytest.raises(OCISetUpSessionError) as exc_info:
+                OraclecloudProvider.test_connection(
+                    key_content=encoded_key,
+                    user="ocid1.user.oc1..aaaaaaaexample",
+                    fingerprint="aa:bb:cc:dd:ee:ff:00:11:22:33:44:55:66:77:88:99",
+                    tenancy="ocid1.tenancy.oc1..aaaaaaaexample",
+                    provider_id="ocid1.tenancy.oc1..aaaaaaaexample",
+                    raise_on_exception=True,
+                )
+
+        error_message = str(exc_info.value)
+        assert "Could not retrieve subscribed OCI regions" in error_message
+        assert "inspect tenancies" in error_message
+        assert "ListRegionSubscriptions" in error_message
 
 
 class TestOraclecloudProviderInit:
@@ -503,7 +576,7 @@ class TestOraclecloudProviderInit:
         assert provider.regions == audited_regions
         assert provider.home_region == "us-ashburn-1"
 
-    def test_init_with_legacy_single_region_preserves_fallback_for_home_region(self):
+    def test_init_with_legacy_single_region_raises_when_region_discovery_fails(self):
         mock_session = OCISession(
             config={"region": "us-phoenix-1"}, signer=None, profile="DEFAULT"
         )
@@ -537,14 +610,17 @@ class TestOraclecloudProviderInit:
                 Exception("discovery failed")
             )
 
-            provider = OraclecloudProvider(
-                region="us-phoenix-1",
-                config_content={"dummy": True},
-                mutelist_content={"Accounts": {}},
-            )
+            with pytest.raises(OCISetUpSessionError) as exc_info:
+                OraclecloudProvider(
+                    region="us-phoenix-1",
+                    config_content={"dummy": True},
+                    mutelist_content={"Accounts": {}},
+                )
 
-        assert [region.key for region in provider.regions] == ["us-phoenix-1"]
-        assert provider.home_region == "us-phoenix-1"
+        error_message = str(exc_info.value)
+        assert "Could not retrieve subscribed OCI regions" in error_message
+        assert "inspect tenancies" in error_message
+        assert "ListRegionSubscriptions" in error_message
 
 
 class TestGetRegionsToAudit:
@@ -575,9 +651,12 @@ class TestGetRegionsToAudit:
             with pytest.raises(OCISetUpSessionError) as exc_info:
                 provider.get_regions_to_audit()
 
-        assert "Could not retrieve OCI subscribed regions" in str(exc_info.value)
+        error_message = str(exc_info.value)
+        assert "Could not retrieve subscribed OCI regions" in error_message
+        assert "inspect tenancies" in error_message
+        assert "ListRegionSubscriptions" in error_message
 
-    def test_single_explicit_region_falls_back_when_region_subscription_discovery_fails(
+    def test_single_explicit_region_raises_when_region_subscription_discovery_fails(
         self,
     ):
         provider = self._provider_with_identity()
@@ -587,10 +666,13 @@ class TestGetRegionsToAudit:
                 Exception("discovery failed")
             )
 
-            regions = provider.get_regions_to_audit("us-phoenix-1")
+            with pytest.raises(OCISetUpSessionError) as exc_info:
+                provider.get_regions_to_audit("us-phoenix-1")
 
-        assert len(regions) == 1
-        assert regions[0].key == "us-phoenix-1"
+        error_message = str(exc_info.value)
+        assert "Could not retrieve subscribed OCI regions" in error_message
+        assert "inspect tenancies" in error_message
+        assert "ListRegionSubscriptions" in error_message
 
     def test_multiple_explicit_regions_raise_when_region_subscription_discovery_fails(
         self,
@@ -602,5 +684,10 @@ class TestGetRegionsToAudit:
                 Exception("discovery failed")
             )
 
-            with pytest.raises(OCISetUpSessionError):
+            with pytest.raises(OCISetUpSessionError) as exc_info:
                 provider.get_regions_to_audit({"us-ashburn-1", "us-phoenix-1"})
+
+        error_message = str(exc_info.value)
+        assert "Could not retrieve subscribed OCI regions" in error_message
+        assert "inspect tenancies" in error_message
+        assert "ListRegionSubscriptions" in error_message

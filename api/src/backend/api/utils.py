@@ -292,6 +292,7 @@ def get_prowler_provider_kwargs(
 def _normalize_oraclecloud_provider_kwargs(secret: dict) -> dict:
     """Normalize external OCI secret fields into SDK provider kwargs."""
     prowler_provider_kwargs = secret.copy()
+    prowler_provider_kwargs.pop("regions", None)
 
     if "region" in prowler_provider_kwargs:
         prowler_provider_kwargs["region"] = {prowler_provider_kwargs["region"]}
@@ -301,7 +302,10 @@ def _normalize_oraclecloud_provider_kwargs(secret: dict) -> dict:
 
 def _normalize_oraclecloud_connection_test_kwargs(secret: dict) -> dict:
     """Normalize external OCI secret fields into test_connection kwargs."""
+    from prowler.providers.oraclecloud.oraclecloud_provider import OraclecloudProvider
+
     prowler_provider_kwargs = secret.copy()
+    prowler_provider_kwargs.pop("regions", None)
 
     if (
         "region" not in prowler_provider_kwargs
@@ -314,7 +318,11 @@ def _normalize_oraclecloud_connection_test_kwargs(secret: dict) -> dict:
         )
     ):
         # Connection validation needs one OCI endpoint, but scans remain unfiltered.
-        prowler_provider_kwargs["region"] = "us-ashburn-1"
+        prowler_provider_kwargs["region"] = getattr(
+            OraclecloudProvider,
+            "_bootstrap_region",
+            OraclecloudProvider._home_region,
+        )
 
     return prowler_provider_kwargs
 

@@ -12,7 +12,6 @@ The following steps apply to Prowler Cloud and the self-hosted Prowler App.
 1. Sign in to the [OCI Console](https://cloud.oracle.com/) and open **Tenancy Details** to copy the Tenancy OCID.
 2. Go to **Identity & Security** → **Users**, select the principal that owns the API key, and copy the **User OCID**.
 3. Generate or locate the API key fingerprint and private key for that user. Follow the [Config File Authentication steps](/user-guide/providers/oci/authentication#config-file-authentication-manual-api-key-setup) to create or rotate the key pair and copy the fingerprint.
-4. Note the **Region** identifier to scan (for example, `us-ashburn-1`).
 
 ### Step 2: Access Prowler Cloud
 1. Navigate to [Prowler Cloud](https://cloud.prowler.com/) or launch [Prowler App](/user-guide/tutorials/prowler-app).
@@ -26,11 +25,10 @@ Prowler App connects to OCI with API key credentials. Provide:
 
 - **User OCID** for the API key owner
 - **Fingerprint** of the API key
-- **Region** (for example, `us-ashburn-1`)
 - **Private Key Content** (paste the full PEM value)
 - **Passphrase (Optional)** if the private key is encrypted
 
-Select **Next**, then **Launch Scan** to validate the connection and start the first OCI scan. The private key content is encoded for secure transmission.
+Select **Next**, then **Launch Scan** to validate the connection and start the first OCI scan. Prowler discovers subscribed regions from OCI, and the private key content is encoded for secure transmission.
 
 ![Add OCI API Key Credentials](./images/oci-add-api-key-credentials.png)
 
@@ -140,6 +138,7 @@ prowler oci --use-instance-principal
 - The compute instance must have a dynamic group and policy allowing access to OCI resources
 - Example policy:
   ```
+  Allow dynamic-group prowler-instances to inspect tenancies in tenancy
   Allow dynamic-group prowler-instances to inspect all-resources in tenancy
   Allow dynamic-group prowler-instances to read all-resources in tenancy
   ```
@@ -193,6 +192,7 @@ Prowler requires **read-only** permissions to audit your OCI tenancy. Below are 
 Create a group `prowler-users` and add your user to it, then create this policy:
 
 ```
+Allow group prowler-users to inspect tenancies in tenancy
 Allow group prowler-users to inspect all-resources in tenancy
 Allow group prowler-users to read all-resources in tenancy
 Allow group prowler-users to read audit-events in tenancy
@@ -201,12 +201,15 @@ Allow group prowler-users to read cloud-guard-problems in tenancy
 Allow group prowler-users to read cloud-guard-targets in tenancy
 ```
 
+The `inspect tenancies` permission grants the OCI `TENANCY_INSPECT` permission required for `ListRegionSubscriptions`, which Prowler uses to discover the subscribed OCI regions before scanning. Prowler cannot start an OCI scan if it cannot retrieve the subscribed regions.
+
 #### Service-Specific Permissions
 
 For more granular control, you can grant specific permissions:
 
 ```
 # Identity
+Allow group prowler-users to inspect tenancies in tenancy
 Allow group prowler-users to inspect users in tenancy
 Allow group prowler-users to inspect groups in tenancy
 Allow group prowler-users to inspect policies in tenancy
@@ -333,6 +336,10 @@ prowler oci \
 - Ensure policies are not restricted by conditions that exclude your user
 
 #### Region Issues
+
+**Error: "Could not retrieve subscribed OCI regions"**
+- Ensure the principal has `Allow group prowler-users to inspect tenancies in tenancy` or the equivalent dynamic-group policy
+- Prowler uses `ListRegionSubscriptions`, which requires the OCI `TENANCY_INSPECT` permission, to discover subscribed regions before scanning
 
 **Error: "Invalid region"**
 - Check available regions: `prowler oci --list-regions`

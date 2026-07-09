@@ -235,6 +235,7 @@ class TestProwlerProviderConnectionTest:
             "fingerprint": "00:11:22:33:44:55:66:77",
             "key_content": "fake-base64-key-content",
             "tenancy": "ocid1.tenancy.oc1..aaaaaaaexample",
+            "regions": ["us-ashburn-1"],
         }
         mock_return_prowler_provider.return_value = MagicMock()
 
@@ -245,7 +246,11 @@ class TestProwlerProviderConnectionTest:
             fingerprint="00:11:22:33:44:55:66:77",
             key_content="fake-base64-key-content",
             tenancy="ocid1.tenancy.oc1..aaaaaaaexample",
-            region="us-ashburn-1",
+            region=getattr(
+                OraclecloudProvider,
+                "_bootstrap_region",
+                OraclecloudProvider._home_region,
+            ),
             provider_id="ocid1.tenancy.oc1..aaaaaaaexample",
             raise_on_exception=False,
         )
@@ -453,6 +458,7 @@ class TestGetProwlerProviderKwargs:
             "fingerprint": "00:11:22:33:44:55:66:77",
             "key_content": "fake-base64-key-content",
             "tenancy": "ocid1.tenancy.oc1..fake",
+            "regions": ["us-ashburn-1"],
         }
         secret_mock = MagicMock()
         secret_mock.secret = secret_dict
@@ -464,7 +470,12 @@ class TestGetProwlerProviderKwargs:
 
         result = get_prowler_provider_kwargs(provider)
 
-        assert result == secret_dict
+        assert result == {
+            "user": "ocid1.user.oc1..fake",
+            "fingerprint": "00:11:22:33:44:55:66:77",
+            "key_content": "fake-base64-key-content",
+            "tenancy": "ocid1.tenancy.oc1..fake",
+        }
         assert "region" not in result
         assert "regions" not in result
 

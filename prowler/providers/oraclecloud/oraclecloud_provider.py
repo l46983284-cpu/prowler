@@ -69,6 +69,11 @@ class OraclecloudProvider(Provider):
     audit_metadata: Audit_Metadata
     _home_region: str = "us-ashburn-1"
     _bootstrap_region: str = "us-ashburn-1"
+    _region_subscriptions_error_message: str = (
+        "Could not retrieve subscribed OCI regions. "
+        "Credentials must have permission to inspect tenancies "
+        "for ListRegionSubscriptions."
+    )
 
     def __init__(
         self,
@@ -169,13 +174,7 @@ class OraclecloudProvider(Provider):
         # Determine the tenancy home region from the full subscription list, independent of
         # the --region filter, so tenancy-level APIs (e.g. the Audit configuration) always
         # target the home region instead of a filtered, non-home region.
-        try:
-            all_subscribed_regions = self.get_regions_to_audit()
-        except OCISetUpSessionError:
-            if single_region and len(self._regions) == 1:
-                all_subscribed_regions = self._regions
-            else:
-                raise
+        all_subscribed_regions = self.get_regions_to_audit()
         self._home_region = next(
             (region.key for region in all_subscribed_regions if region.is_home_region),
             self._regions[0].key if self._regions else "us-ashburn-1",
@@ -614,28 +613,10 @@ class OraclecloudProvider(Provider):
                     )
             logger.info(f"Found {len(regions)} subscribed regions")
         except Exception as error:
-            if not explicit_regions or len(explicit_regions) != 1:
-                raise OCISetUpSessionError(
-                    original_exception=error,
-                    message=(
-                        "Could not retrieve OCI subscribed regions. "
-                        "Configure an explicit region to preserve legacy single-region scans, "
-                        "or fix the credentials/permissions required to list region subscriptions."
-                    ),
-                ) from error
-
-            config_region = next(iter(explicit_regions))
-            logger.warning(
-                f"Could not retrieve region subscriptions: {error}. "
-                f"Using explicitly configured region {config_region}."
-            )
-            regions.append(
-                OCIRegion(
-                    key=config_region,
-                    name=OCI_REGIONS.get(config_region, config_region),
-                    is_home_region=True,
-                )
-            )
+            raise OCISetUpSessionError(
+                original_exception=error,
+                message=OraclecloudProvider._region_subscriptions_error_message,
+            ) from error
 
         return regions
 
@@ -947,6 +928,20 @@ class OraclecloudProvider(Provider):
                     file=pathlib.Path(__file__).name,
                     message=f"Provider ID mismatch: expected '{provider_id}', got '{identity.tenancy_id}'",
                 )
+
+            try:
+                if session.signer:
+                    identity_client = oci.identity.IdentityClient(
+                        config=session.config, signer=session.signer
+                    )
+                else:
+                    identity_client = oci.identity.IdentityClient(config=session.config)
+                identity_client.list_region_subscriptions(identity.tenancy_id)
+            except Exception as error:
+                raise OCISetUpSessionError(
+                    original_exception=error,
+                    message=OraclecloudProvider._region_subscriptions_error_message,
+                ) from error
 
             logger.info(f"Successfully connected to OCI tenancy: {identity.tenancy_id}")
 
