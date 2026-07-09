@@ -1,6 +1,7 @@
 import os
 import pathlib
 import re
+from collections.abc import Iterable
 
 import oci
 from colorama import Fore, Style
@@ -79,7 +80,7 @@ class OraclecloudProvider(Provider):
         self,
         oci_config_file: str = None,
         profile: str = None,
-        region: set = None,
+        region: str | Iterable[str] = None,
         compartment_ids: list = None,
         config_path: str = None,
         config_content: dict = None,
@@ -135,13 +136,17 @@ class OraclecloudProvider(Provider):
 
         logger.info("Initializing OCI provider ...")
 
-        # Check if the configuration is scanning a single region
-        single_region = None
-        if isinstance(region, str):
-            single_region = region
-        elif region:
-            single_region = sorted(region)[0]
-        bootstrap_region = single_region or self._bootstrap_region
+        # Check if the configuration is scanning exactly one explicit region.
+        explicit_regions = self._normalize_region_input(region)
+        single_region = (
+            next(iter(explicit_regions))
+            if explicit_regions and len(explicit_regions) == 1
+            else None
+        )
+        has_direct_credentials = user and fingerprint and tenancy
+        bootstrap_region = single_region or (
+            self._bootstrap_region if has_direct_credentials else None
+        )
 
         # Setup OCI Session
         logger.info("Setting up OCI session ...")
@@ -251,6 +256,22 @@ class OraclecloudProvider(Provider):
         mutelist method returns the provider's mutelist.
         """
         return self._mutelist
+
+    @staticmethod
+    def _normalize_region_input(region: str | Iterable[str] = None) -> set[str] | None:
+        """Normalize OCI region input while treating strings as one region.
+
+        Args:
+            region: Region input as a string, iterable of strings, or None.
+
+        Returns:
+            A set of region names, or None when no region is provided.
+        """
+        if isinstance(region, str):
+            return {region} if region else None
+        if region:
+            return set(region)
+        return None
 
     @staticmethod
     def setup_session(
@@ -564,13 +585,9 @@ class OraclecloudProvider(Provider):
 
     @staticmethod
     def _filter_regions_to_audit(
-        subscribed_regions: list, region_set: set = None
+        subscribed_regions: list, region_set: str | Iterable[str] = None
     ) -> list:
-        explicit_regions = None
-        if isinstance(region_set, str):
-            explicit_regions = {region_set}
-        elif region_set:
-            explicit_regions = set(region_set)
+        explicit_regions = OraclecloudProvider._normalize_region_input(region_set)
 
         if not explicit_regions:
             return subscribed_regions
@@ -579,7 +596,7 @@ class OraclecloudProvider(Provider):
             region for region in subscribed_regions if region.key in explicit_regions
         ]
 
-    def get_regions_to_audit(self, region_set: set = None) -> list:
+    def get_regions_to_audit(self, region_set: str | Iterable[str] = None) -> list:
         """
         get_regions_to_audit returns the list of regions to audit.
 
@@ -870,17 +887,21 @@ class OraclecloudProvider(Provider):
             session = None
 
             # If API key credentials are provided directly, create config from them
-            if user and fingerprint and tenancy:
+            has_direct_credentials = user and fingerprint and tenancy
+            identity_region = region
+            if has_direct_credentials:
                 import base64
 
                 logger.info("Using API key credentials from direct parameters")
+
+                identity_region = region or OraclecloudProvider._bootstrap_region
 
                 # Create config dict from provided credentials
                 config = {
                     "user": user,
                     "fingerprint": fingerprint,
                     "tenancy": tenancy,
-                    "region": region or OraclecloudProvider._bootstrap_region,
+                    "region": identity_region,
                 }
 
                 # Handle private key
@@ -929,7 +950,7 @@ class OraclecloudProvider(Provider):
 
             identity = OraclecloudProvider.set_identity(
                 session=session,
-                region=region or OraclecloudProvider._bootstrap_region,
+                region=identity_region,
             )
 
             # Validate provider_id if provided
