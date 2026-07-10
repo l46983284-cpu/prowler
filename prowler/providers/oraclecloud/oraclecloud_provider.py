@@ -587,6 +587,20 @@ class OraclecloudProvider(Provider):
     def _filter_regions_to_audit(
         subscribed_regions: list, region_set: str | Iterable[str] = None
     ) -> list:
+        """Filter subscribed OCI regions by an explicit region selection.
+
+        Args:
+            subscribed_regions: The full list of subscribed OCIRegion objects.
+            region_set: An explicit OCI region name or iterable of region names
+                to audit. When empty or None, no filtering is applied.
+
+        Returns:
+            list: The subscribed regions to audit.
+
+        Raises:
+            OCISetUpSessionError: If any explicitly requested region is not
+                subscribed or unavailable for the tenancy.
+        """
         explicit_regions = OraclecloudProvider._normalize_region_input(region_set)
 
         if not explicit_regions:
